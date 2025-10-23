@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <!-- Version 1.0.2 - Custom dialog instead of prompt() -->
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 16px;
+      font-size: 12px;
+      background: #ffffff;
+    }
+    .step {
+      margin-bottom: 20px;
+      padding: 16px;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .step.disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    h2 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #333;
+    }
+    h3 {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #555;
+    }
+    p {
+      margin-bottom: 12px;
+      color: #666;
+      line-height: 1.5;
+    }
+    button {
+      background: #18A0FB;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-bottom: 8px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    button:hover { background: #0090F0; }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    button.secondary {
+      background: #ffffff;
+      color: #18A0FB;
+      border: 1px solid #18A0FB;
+    }
+    button.secondary:hover {
+      background: #f0f8ff;
+    }
+    button.danger {
+      background: #ff4444;
+    }
+    button.danger:hover {
+      background: #cc0000;
+    }
+    .template-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: #ffffff;
+      margin-bottom: 6px;
+      border-radius: 6px;
+      border: 1px solid #e5e5e5;
+    }
+    .template-item-name {
+      font-weight: 500;
+      color: #333;
+    }
+    .template-item-info {
+      font-size: 10px;
+      color: #999;
+      margin-top: 2px;
+    }
+    .file-input-wrapper {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: #ffffff;
+    }
+    .file-input-wrapper:hover {
+      border-color: #18A0FB;
+      background: #f0f8ff;
+    }
+    .file-input-wrapper.has-file {
+      border-color: #00c853;
+      background: #e8f5e9;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    .preview-table {
+      width: 100%;
+      font-size: 10px;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: #ffffff;
+    }
+    .preview-table th, .preview-table td {
+      padding: 8px 6px;
+      border: 1px solid #e5e5e5;
+      text-align: left;
+    }
+    .preview-table th {
+      background: #f5f5f5;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+    }
+    .preview-scroll {
+      max-height: 300px;
+      overflow: auto;
+      border-radius: 6px;
+      border: 1px solid #e5e5e5;
+    }
+    .status {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      display: inline-block;
+    }
+    .status.success { background: #e8f5e9; color: #2e7d32; }
+    .status.error { background: #ffebee; color: #c62828; }
+    .status.processing { background: #fff3e0; color: #ef6c00; }
+    .status.info { background: #e3f2fd; color: #1976d2; }
+    .spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #ef6c00;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .progress-bar {
+      width: 100%;
+      height: 24px;
+      background: #f5f5f5;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 12px 0;
+      border: 1px solid #e5e5e5;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #18A0FB, #00c853);
+      transition: width 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .checkbox-label input[type="checkbox"] {
+      margin-right: 8px;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 24px;
+      color: #999;
+      font-size: 11px;
+    }
+    .copy-mapping-item {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    .copy-mapping-item input {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid #e5e5e5;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .error-message {
+      background: #ffebee;
+      color: #c62828;
+      padding: 12px;
+      border-radius: 6px;
+      margin-top: 12px;
+      font-size: 11px;
+      border-left: 3px solid #c62828;
+    }
+    .success-message {
+      background: #e8f5e9;
+      color: #2e7d32;
+      padding: 12px;
+      border-radius: 6px;
+      margin-top: 12px;
+      font-size: 11px;
+      border-left: 3px solid #2e7d32;
+    }
+    .info-box {
+      background: #e3f2fd;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-size: 11px;
+      line-height: 1.6;
+      border-left: 3px solid #1976d2;
+    }
+    .button-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    /* Custom Dialog */
+    .dialog-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    .dialog-overlay.active {
+      display: flex;
+    }
+    .dialog-box {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      min-width: 300px;
+      max-width: 400px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    .dialog-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #333;
+    }
+    .dialog-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #e5e5e5;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 16px;
+      box-sizing: border-box;
+    }
+    .dialog-input:focus {
+      outline: none;
+      border-color: #18A0FB;
+    }
+    .dialog-buttons {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .dialog-button {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      border: none;
+      font-weight: 500;
+    }
+    .dialog-button.primary {
+      background: #18A0FB;
+      color: white;
+    }
+    .dialog-button.primary:hover {
+      background: #0090F0;
+    }
+    .dialog-button.secondary {
+      background: #f5f5f5;
+      color: #333;
+    }
+    .dialog-button.secondary:hover {
+      background: #e5e5e5;
+    }
+  </style>
+</head>
+<body>
+  <!-- Custom Dialog -->
+  <div class="dialog-overlay" id="custom-dialog">
+    <div class="dialog-box">
+      <div class="dialog-title" id="dialog-title">Enter Value</div>
+      <input type="text" class="dialog-input" id="dialog-input" placeholder="Enter value...">
+      <div class="dialog-buttons">
+        <button class="dialog-button secondary" id="dialog-cancel">Cancel</button>
+        <button class="dialog-button primary" id="dialog-ok">OK</button>
+      </div>
+    </div>
+  </div>
+  <!-- Step 1: Template Setup -->
+  <div class="step" id="step1">
+    <h2>📐 Step 1: Template Setup</h2>
+    <div class="info-box">
+      <strong>Instructions:</strong><br>
+      1. Create frames in Figma for your designs<br>
+      2. For <strong>poster templates</strong>, add text layer with placeholder: <code>{poster_copy}</code><br>
+      3. For <strong>flyer templates</strong>, add text layer with placeholder: <code>{flyer_copy}</code><br>
+      4. Select a frame and click "Add Template" below
+    </div>
+
+    <div style="margin-bottom: 16px;">
+      <h3>Poster Templates (A2)</h3>
+      <div id="poster-templates">
+        <div class="empty-state">No poster templates added yet</div>
+      </div>
+      <button id="add-poster-template">+ Add Poster Template</button>
+    </div>
+
+    <div style="margin-bottom: 16px;">
+      <h3>Flyer Templates (A5)</h3>
+      <div id="flyer-templates">
+        <div class="empty-state">No flyer templates added yet</div>
+      </div>
+      <button id="add-flyer-template">+ Add Flyer Template</button>
+    </div>
+
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e5e5;">
+      <div class="button-group">
+        <button id="validate-templates" class="secondary">🔍 Validate Templates</button>
+        <button id="clear-templates" class="danger">🗑️ Clear All</button>
+      </div>
+      <div id="template-status" style="margin-top: 12px;"></div>
+    </div>
+  </div>
+
+  <!-- Step 2: CSV Import -->
+  <div class="step" id="step2">
+    <h2>📊 Step 2: Import CSV File</h2>
+
+    <div class="info-box">
+      <strong>CSV Format:</strong><br>
+      Your CSV must include these columns:<br>
+      • Store name (브랜드명)<br>
+      • Poster design option (옵션 1, 옵션 2, etc.)<br>
+      • Flyer design option (옵션 1, 옵션 2, etc.)<br>
+      • Copy text (can use <code>[식당이름]</code> and <code>[{n,000원}]</code> placeholders)<br>
+      • Discount amount (optional, e.g., "3,000원")
+    </div>
+
+    <div class="file-input-wrapper" id="csv-drop-zone">
+      <input type="file" id="csv-input" accept=".csv">
+      <div id="drop-text">
+        <p style="font-size: 16px; margin-bottom: 8px;">🎯 Drop CSV file here</p>
+        <p style="color: #999;">or click to browse</p>
+        <p style="color: #999; font-size: 10px; margin-top: 4px;">Must be UTF-8 encoded</p>
+      </div>
+    </div>
+
+    <div id="csv-preview" style="display: none; margin-top: 16px;">
+      <h3>Preview (First 5 rows)</h3>
+      <div class="preview-scroll">
+        <table class="preview-table" id="preview-table"></table>
+      </div>
+      <p id="csv-stats" style="margin-top: 8px; color: #666; font-size: 11px;"></p>
+    </div>
+  </div>
+
+  <!-- Step 3: Generate -->
+  <div class="step disabled" id="step3">
+    <h2>🚀 Step 3: Generate Materials</h2>
+
+    <div id="generation-options" style="margin-bottom: 16px;">
+      <label class="checkbox-label">
+        <input type="checkbox" id="generate-posters" checked>
+        <span>Generate Posters (A2)</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="generate-flyers" checked>
+        <span>Generate Flyers (A5)</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="group-by-brand" checked>
+        <span>Group materials by brand name</span>
+      </label>
+    </div>
+
+    <button id="generate-all" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 600;">
+      🎨 Generate All Materials
+    </button>
+
+    <div id="progress-section" style="display: none; margin-top: 16px;">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width: 0%">0%</div>
+      </div>
+      <p id="progress-text" style="text-align: center; color: #666; font-size: 11px;"></p>
+    </div>
+
+    <div id="generation-results"></div>
+  </div>
+
+  <!-- PapaParse Library (v5.4.1) - CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <!-- JSZip Library (v3.10.1) - CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <!-- pdf-lib Library (v1.17.1) - CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+  <!-- Main UI Logic -->
+  <script>
+    // Global state
+    const templates = {
+      poster: {},
+      flyer: {}
+    };
+
+    let csvData = null;
+    let generatedNodeIds = [];
+    let exportedImages = [];
+    let exportMode = null; // 'individual' or 'zip'
+
+    // Custom Dialog Function
+    function showDialog(title, placeholder, callback) {
+      const overlay = document.getElementById('custom-dialog');
+      const titleEl = document.getElementById('dialog-title');
+      const input = document.getElementById('dialog-input');
+      const okBtn = document.getElementById('dialog-ok');
+      const cancelBtn = document.getElementById('dialog-cancel');
+
+      titleEl.textContent = title;
+      input.placeholder = placeholder;
+      input.value = '';
+      overlay.classList.add('active');
+
+      // Focus input
+      setTimeout(() => input.focus(), 100);
+
+      // Handle OK
+      const handleOk = () => {
+        const value = input.value.trim();
+        cleanup();
+        if (value) {
+          callback(value);
+        }
+      };
+
+      // Handle Cancel
+      const handleCancel = () => {
+        cleanup();
+      };
+
+      // Handle Enter key
+      const handleKeyPress = (e) => {
+        if (e.key === 'Enter') {
+          handleOk();
+        } else if (e.key === 'Escape') {
+          handleCancel();
+        }
+      };
+
+      // Cleanup function
+      const cleanup = () => {
+        overlay.classList.remove('active');
+        okBtn.removeEventListener('click', handleOk);
+        cancelBtn.removeEventListener('click', handleCancel);
+        input.removeEventListener('keypress', handleKeyPress);
+      };
+
+      // Add event listeners
+      okBtn.addEventListener('click', handleOk);
+      cancelBtn.addEventListener('click', handleCancel);
+      input.addEventListener('keypress', handleKeyPress);
+    }
+
+    // Initialize - Run immediately if DOM already loaded, otherwise wait
+    function initialize() {
+      console.log('[Plugin] Initializing...');
+      setupEventListeners();
+      loadStoredTemplates();
+      console.log('[Plugin] Initialized successfully');
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initialize);
+    } else {
+      initialize();
+    }
+
+    function setupEventListeners() {
+      console.log('[Plugin] Setting up event listeners...');
+
+      // Template management
+      document.getElementById('add-poster-template').addEventListener('click', () => {
+        console.log('[Plugin] Add Poster Template button clicked');
+        showDialog(
+          'Add Poster Template',
+          'Enter design name (e.g., Design 1, Design 2)',
+          (designName) => {
+            console.log('[Plugin] Poster template design name:', designName);
+            parent.postMessage({
+              pluginMessage: {
+                type: 'add-template',
+                data: { type: 'poster', designName: designName }
+              }
+            }, '*');
+          }
+        );
+      });
+
+      document.getElementById('add-flyer-template').addEventListener('click', () => {
+        console.log('[Plugin] Add Flyer Template button clicked');
+        showDialog(
+          'Add Flyer Template',
+          'Enter design name (e.g., Design 1, Design 2)',
+          (designName) => {
+            console.log('[Plugin] Flyer template design name:', designName);
+            parent.postMessage({
+              pluginMessage: {
+                type: 'add-template',
+                data: { type: 'flyer', designName: designName }
+              }
+            }, '*');
+          }
+        );
+      });
+
+      document.getElementById('validate-templates').addEventListener('click', () => {
+        parent.postMessage({ pluginMessage: { type: 'validate-templates' } }, '*');
+      });
+
+      document.getElementById('clear-templates').addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear all templates? This cannot be undone.')) {
+          parent.postMessage({ pluginMessage: { type: 'clear-all-templates' } }, '*');
+        }
+      });
+
+      // CSV Upload
+      const csvInput = document.getElementById('csv-input');
+      const dropZone = document.getElementById('csv-drop-zone');
+
+      dropZone.addEventListener('click', () => csvInput.click());
+
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#18A0FB';
+      });
+
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.style.borderColor = '#ccc';
+      });
+
+      dropZone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#ccc';
+        const file = e.dataTransfer.files[0];
+        if (file && (file.type === 'text/csv' || file.name.endsWith('.csv'))) {
+          await handleCSVFile(file);
+        } else {
+          alert('Please upload a CSV file');
+        }
+      });
+
+      csvInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          await handleCSVFile(file);
+        }
+      });
+
+      // Generate button
+      document.getElementById('generate-all').addEventListener('click', generateMaterials);
+    }
+
+    function loadStoredTemplates() {
+      parent.postMessage({ pluginMessage: { type: 'get-stored-templates' } }, '*');
+    }
+
+    // CSV Column Names (exact headers from the CSV)
+    const REQUIRED_COLUMNS = {
+      websiteUrl: "오터오더 사이트",
+      storeName: "오터오더를 사용하려는 브랜드 이름을 알려주세요. (여러개인 경우 , 로 구분하여 입력)",
+      posterDesign: "[포스터 1장 기본 제공] 선호하는 디자인을 골라주세요. (A2 사이즈)",
+      posterCopy: "포스터에 들어갈 문구를 선택하세요.",
+      flyerDesign: "[전단지 300장 기본 제공] 선호하는 디자인을 선택하세요. (A5 사이즈)",
+      flyerCopy: "전단지에 들어갈 문구를 선택하세요.",
+      discountAmount: "전단지에 삽입할 주문 건별 할인 예정 금액을 알려주세요."
+    };
+
+    function validateCSVColumns(headers) {
+      console.log('[CSV Validation] Headers found in CSV:', headers);
+      console.log('[CSV Validation] Looking for these required columns:', Object.values(REQUIRED_COLUMNS));
+
+      const missing = [];
+
+      for (const [key, columnName] of Object.entries(REQUIRED_COLUMNS)) {
+        if (!headers.includes(columnName)) {
+          missing.push(columnName);
+        }
+      }
+
+      if (missing.length > 0) {
+        console.error('[CSV Validation] Missing columns:', missing);
+        const errorMsg = `Missing required columns:\n\n${missing.map((col, i) => `${i + 1}. ${col}`).join('\n')}\n\nFound columns in CSV:\n${headers.map((col, i) => `${i + 1}. ${col}`).join('\n')}`;
+        throw new Error(errorMsg);
+      }
+
+      console.log('[CSV Validation] All required columns found!');
+      return true;
+    }
+
+    async function handleCSVFile(file) {
+      try {
+        csvData = await parseCSV(file);
+
+        if (!csvData || csvData.length === 0) {
+          throw new Error('CSV file is empty or could not be parsed');
+        }
+
+        // Validate CSV has all required columns
+        const headers = Object.keys(csvData[0]);
+        validateCSVColumns(headers);
+
+        // Show preview
+        const preview = document.getElementById('csv-preview');
+        const table = document.getElementById('preview-table');
+        const stats = document.getElementById('csv-stats');
+        const dropZone = document.getElementById('csv-drop-zone');
+
+        // Clear previous content
+        table.innerHTML = '';
+
+        // Filter to show only relevant columns
+        const relevantColumns = Object.values(REQUIRED_COLUMNS).filter(col => headers.includes(col));
+
+        // Create shortened column names for display
+        const columnDisplayNames = {
+          [REQUIRED_COLUMNS.websiteUrl]: "사이트",
+          [REQUIRED_COLUMNS.storeName]: "브랜드명",
+          [REQUIRED_COLUMNS.posterDesign]: "포스터 디자인",
+          [REQUIRED_COLUMNS.posterCopy]: "포스터 문구",
+          [REQUIRED_COLUMNS.flyerDesign]: "전단지 디자인",
+          [REQUIRED_COLUMNS.flyerCopy]: "전단지 문구",
+          [REQUIRED_COLUMNS.discountAmount]: "할인금액"
+        };
+
+        // Add headers (only relevant columns)
+        const headerRow = table.insertRow();
+        relevantColumns.forEach(column => {
+          const th = document.createElement('th');
+          th.textContent = columnDisplayNames[column] || column;
+          th.title = column; // Full column name on hover
+          headerRow.appendChild(th);
+        });
+
+        // Add first 5 rows (only relevant columns)
+        csvData.slice(0, 5).forEach(row => {
+          const tr = table.insertRow();
+          relevantColumns.forEach(column => {
+            const td = tr.insertCell();
+            const cellValue = row[column] || '';
+            td.textContent = cellValue.length > 30 ? cellValue.substring(0, 30) + '...' : cellValue;
+            td.title = cellValue; // Full value on hover
+          });
+        });
+
+        // Show stats
+        stats.textContent = `Total rows: ${csvData.length} | Columns: ${relevantColumns.length} (showing relevant only)`;
+
+        // Update UI
+        preview.style.display = 'block';
+        dropZone.classList.add('has-file');
+        document.getElementById('drop-text').innerHTML = `
+          <p style="color: #00c853; font-weight: 600;">✓ CSV Loaded</p>
+          <p style="font-size: 11px; margin-top: 4px;">${file.name}</p>
+        `;
+
+        // Enable generate step
+        document.getElementById('step3').classList.remove('disabled');
+
+      } catch (error) {
+        alert('Error parsing CSV: ' + error.message);
+        console.error('CSV parse error:', error);
+      }
+    }
+
+    function parseCSV(file) {
+      return new Promise((resolve, reject) => {
+        Papa.parse(file, {
+          header: true,
+          encoding: 'UTF-8',
+          skipEmptyLines: true,
+          complete: (results) => {
+            if (results.errors.length > 0) {
+              console.warn('CSV parsing warnings:', results.errors);
+            }
+            resolve(results.data);
+          },
+          error: (error) => {
+            reject(error);
+          }
+        });
+      });
+    }
+
+    function generateMaterials() {
+      if (!csvData || csvData.length === 0) {
+        alert('Please upload a CSV file first');
+        return;
+      }
+
+      const options = {
+        generatePosters: document.getElementById('generate-posters').checked,
+        generateFlyers: document.getElementById('generate-flyers').checked,
+        groupByBrand: document.getElementById('group-by-brand').checked
+      };
+
+      if (!options.generatePosters && !options.generateFlyers) {
+        alert('Please select at least one material type to generate');
+        return;
+      }
+
+      // Show progress
+      document.getElementById('progress-section').style.display = 'block';
+      document.getElementById('generate-all').disabled = true;
+      document.getElementById('generation-results').innerHTML = '';
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'generate-materials',
+          data: {
+            csvData,
+            options
+          }
+        }
+      }, '*');
+    }
+
+    // Handle messages from plugin
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+
+      switch (msg.type) {
+        case 'template-added':
+          handleTemplateAdded(msg.data);
+          break;
+
+        case 'stored-templates':
+          displayStoredTemplates(msg.data);
+          break;
+
+        case 'templates-cleared':
+          templates.poster = {};
+          templates.flyer = {};
+          document.getElementById('poster-templates').innerHTML = '<div class="empty-state">No poster templates added yet</div>';
+          document.getElementById('flyer-templates').innerHTML = '<div class="empty-state">No flyer templates added yet</div>';
+          break;
+
+        case 'validation-complete':
+          handleValidationComplete(msg.data);
+          break;
+
+        case 'progress-update':
+          updateProgress(msg.data);
+          break;
+
+        case 'generation-complete':
+          handleGenerationComplete(msg.data);
+          break;
+
+        case 'export-progress':
+          handleExportProgress(msg.data);
+          break;
+
+        case 'export-image':
+          handleExportImage(msg.data);
+          break;
+
+        case 'export-complete':
+          handleExportComplete(msg.data);
+          break;
+
+        case 'error':
+          handleError(msg.message);
+          break;
+      }
+    };
+
+    function handleTemplateAdded(data) {
+      templates[data.templateType][data.designName] = data;
+      displayStoredTemplates({
+        posters: Object.values(templates.poster),
+        flyers: Object.values(templates.flyer)
+      });
+    }
+
+    function displayStoredTemplates(data) {
+      const posterContainer = document.getElementById('poster-templates');
+      const flyerContainer = document.getElementById('flyer-templates');
+
+      // Display posters
+      if (data.posters && data.posters.length > 0) {
+        posterContainer.innerHTML = '';
+        data.posters.forEach(template => {
+          templates.poster[template.designName] = template;
+          const item = document.createElement('div');
+          item.className = 'template-item';
+          item.innerHTML = `
+            <div>
+              <div class="template-item-name">${template.designName}</div>
+              <div class="template-item-info">${template.name}</div>
+            </div>
+            <span class="status success">✓ Ready</span>
+          `;
+          posterContainer.appendChild(item);
+        });
+      } else {
+        posterContainer.innerHTML = '<div class="empty-state">No poster templates added yet</div>';
+      }
+
+      // Display flyers
+      if (data.flyers && data.flyers.length > 0) {
+        flyerContainer.innerHTML = '';
+        data.flyers.forEach(template => {
+          templates.flyer[template.designName] = template;
+          const item = document.createElement('div');
+          item.className = 'template-item';
+          item.innerHTML = `
+            <div>
+              <div class="template-item-name">${template.designName}</div>
+              <div class="template-item-info">${template.name}</div>
+            </div>
+            <span class="status success">✓ Ready</span>
+          `;
+          flyerContainer.appendChild(item);
+        });
+      } else {
+        flyerContainer.innerHTML = '<div class="empty-state">No flyer templates added yet</div>';
+      }
+    }
+
+    function handleValidationComplete(data) {
+      const status = document.getElementById('template-status');
+      if (data.invalid > 0) {
+        status.innerHTML = `<span class="status error">⚠️ ${data.invalid} template(s) invalid</span>`;
+      } else {
+        status.innerHTML = `<span class="status success">✓ All ${data.valid} template(s) valid</span>`;
+      }
+    }
+
+    function updateProgress(data) {
+      const fill = document.getElementById('progress-fill');
+      const text = document.getElementById('progress-text');
+
+      fill.style.width = data.percentage + '%';
+      fill.textContent = data.percentage + '%';
+      text.textContent = `Processing ${data.current} of ${data.total} items...`;
+    }
+
+    function handleGenerationComplete(data) {
+      document.getElementById('progress-text').textContent = `✓ Generation complete! (${data.total} items)`;
+      document.getElementById('generate-all').disabled = false;
+
+      // Store node IDs for export
+      generatedNodeIds = data.nodeIds || [];
+
+      const results = document.getElementById('generation-results');
+      results.style.display = 'block';
+
+      let exportButtons = '';
+      if (generatedNodeIds.length > 0) {
+        exportButtons = `
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e5e5;">
+            <h3 style="margin-bottom: 12px;">📥 Export as PDF</h3>
+            <div class="button-group">
+              <button id="export-individual-png" style="flex: 1;">💾 Download Individual PDFs</button>
+              <button id="export-zip" style="flex: 1;">📦 Download PDFs as ZIP</button>
+            </div>
+            <div id="export-status" style="margin-top: 12px;"></div>
+          </div>
+        `;
+      }
+
+      if (data.errors && data.errors.length > 0) {
+        results.innerHTML = `
+          <div class="error-message">
+            <strong>⚠️ Completed with ${data.errors.length} error(s):</strong><br>
+            ${data.errors.slice(0, 5).map(e => '• ' + e).join('<br>')}
+            ${data.errors.length > 5 ? '<br>...and ' + (data.errors.length - 5) + ' more (check console)' : ''}
+          </div>
+          ${exportButtons}
+        `;
+      } else {
+        results.innerHTML = `
+          <div class="success-message">
+            <strong>✓ All materials generated successfully!</strong><br>
+            Generated ${data.total} items. Check your Figma canvas.
+          </div>
+          ${exportButtons}
+        `;
+      }
+
+      // Add event listeners for export buttons
+      if (generatedNodeIds.length > 0) {
+        setTimeout(() => {
+          document.getElementById('export-individual-png').addEventListener('click', exportIndividualPNGs);
+          document.getElementById('export-zip').addEventListener('click', exportAsZip);
+        }, 100);
+      }
+    }
+
+    function handleError(message) {
+      alert('Error: ' + message);
+      document.getElementById('generate-all').disabled = false;
+    }
+
+    // Export functions
+    function exportIndividualPNGs() {
+      if (generatedNodeIds.length === 0) {
+        alert('No materials to export. Please generate materials first.');
+        return;
+      }
+
+      exportedImages = [];
+      exportMode = 'individual';
+
+      const exportStatus = document.getElementById('export-status');
+      exportStatus.innerHTML = '<span class="status processing">⏳ Exporting...</span>';
+
+      document.getElementById('export-individual-png').disabled = true;
+      document.getElementById('export-zip').disabled = true;
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'export-as-png',
+          data: { nodeIds: generatedNodeIds }
+        }
+      }, '*');
+    }
+
+    function exportAsZip() {
+      if (generatedNodeIds.length === 0) {
+        alert('No materials to export. Please generate materials first.');
+        return;
+      }
+
+      exportedImages = [];
+      exportMode = 'zip';
+
+      const exportStatus = document.getElementById('export-status');
+      exportStatus.innerHTML = '<span class="status processing">⏳ Exporting...</span>';
+
+      document.getElementById('export-individual-png').disabled = true;
+      document.getElementById('export-zip').disabled = true;
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'export-as-png',
+          data: { nodeIds: generatedNodeIds }
+        }
+      }, '*');
+    }
+
+    function downloadFile(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // Helper function to convert Base64 string to Uint8Array
+    function base64ToUint8Array(base64) {
+      const startTime = Date.now();
+      const sizeMB = (base64.length / 1024 / 1024).toFixed(2);
+      console.log(`[EXPORT-UI] Starting Base64 decode: ${sizeMB} MB`);
+
+      const binaryString = atob(base64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const endTime = Date.now();
+      const duration = ((endTime - startTime) / 1000).toFixed(2);
+      const resultSizeMB = (bytes.length / 1024 / 1024).toFixed(2);
+      console.log(`[EXPORT-UI] Base64 decode complete: ${resultSizeMB} MB, took ${duration}s`);
+
+      return bytes;
+    }
+
+    // Helper function to convert PNG to A2 PDF using pdf-lib
+    async function convertPNGtoPDF(pngBytes, fileName) {
+      const startTime = Date.now();
+      const sizeMB = (pngBytes.length / 1024 / 1024).toFixed(2);
+      console.log(`[PDF-CONVERT] Starting PDF conversion for "${fileName}": ${sizeMB} MB PNG`);
+
+      try {
+        const { PDFDocument } = PDFLib;
+
+        // Create a new PDF document
+        const pdfDoc = await PDFDocument.create();
+
+        // Embed the PNG image
+        const pngImage = await pdfDoc.embedPng(pngBytes);
+
+        // A2 dimensions at 300 DPI: 4984 × 7041 pixels
+        // Convert to PDF points: pixels * 72 / 300 DPI
+        const widthInPoints = (4984 * 72) / 300;  // 1195.2 points ≈ 42.2 cm
+        const heightInPoints = (7041 * 72) / 300; // 1689.84 points ≈ 59.61 cm
+
+        console.log(`[PDF-CONVERT] Page dimensions: ${widthInPoints.toFixed(2)} × ${heightInPoints.toFixed(2)} points`);
+
+        // Add a page with exact A2 dimensions
+        const page = pdfDoc.addPage([widthInPoints, heightInPoints]);
+
+        // Draw the image to fill the entire page
+        page.drawImage(pngImage, {
+          x: 0,
+          y: 0,
+          width: widthInPoints,
+          height: heightInPoints,
+        });
+
+        // Save the PDF
+        const pdfBytes = await pdfDoc.save();
+
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        const pdfSizeMB = (pdfBytes.length / 1024 / 1024).toFixed(2);
+        console.log(`[PDF-CONVERT] PDF conversion complete: ${pdfSizeMB} MB, took ${duration}s`);
+
+        return pdfBytes;
+      } catch (error) {
+        console.error(`[PDF-CONVERT] Error converting to PDF:`, error);
+        throw error;
+      }
+    }
+
+    async function handleExportImage(data) {
+      console.log(`[EXPORT-UI] ===== Received export-image message for ${data.index + 1}/${data.total} =====`);
+
+      // data.bytes is already a Uint8Array, no decoding needed!
+      const bytes = new Uint8Array(data.bytes);
+      const sizeMB = (bytes.length / 1024 / 1024).toFixed(2);
+      console.log(`[EXPORT-UI] Received PNG data: ${sizeMB} MB`);
+      console.log(`[EXPORT-UI] Image name: "${data.name}"`);
+
+      const exportStatus = document.getElementById('export-status');
+
+      // Show spinner with "Converting to PDF" status
+      exportStatus.innerHTML = `<span class="status processing"><span class="spinner"></span>Converting to PDF (${data.index + 1} of ${data.total})...</span>`;
+
+      // Convert PNG to PDF
+      const pdfBytes = await convertPNGtoPDF(bytes, data.name);
+
+      // Store PDF instead of PNG
+      console.log(`[EXPORT-UI] Storing PDF in array...`);
+      exportedImages.push({
+        name: data.name,
+        bytes: pdfBytes
+      });
+      console.log(`[EXPORT-UI] Stored successfully. Total PDFs in array: ${exportedImages.length}`);
+
+      // Update progress with success
+      exportStatus.innerHTML = `<span class="status success">✓ PDF ready! (${data.index + 1} of ${data.total})</span>`;
+      console.log(`[EXPORT-UI] UI updated`);
+    }
+
+    async function handleExportComplete(data) {
+      console.log(`[EXPORT-UI] ===== Received export-complete message =====`);
+      console.log(`[EXPORT-UI] Total images received: ${exportedImages.length}`);
+      console.log(`[EXPORT-UI] Export mode: ${exportMode}`);
+
+      const exportStatus = document.getElementById('export-status');
+
+      try {
+        if (exportMode === 'zip') {
+          // Create ZIP file
+          console.log(`[EXPORT-UI] Creating ZIP file...`);
+          exportStatus.innerHTML = '<span class="status processing">⏳ Creating ZIP file...</span>';
+
+          const zipStart = Date.now();
+          const zip = new JSZip();
+          const folder = zip.folder('Otter_Order_Materials');
+
+          exportedImages.forEach(img => {
+            const sanitizedName = img.name.replace(/[^a-z0-9가-힣\s\-_]/gi, '_');
+            folder.file(`${sanitizedName}.pdf`, img.bytes);
+          });
+
+          console.log(`[EXPORT-UI] Generating ZIP blob...`);
+          const zipBlob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+          });
+
+          const zipDuration = ((Date.now() - zipStart) / 1000).toFixed(2);
+          const zipSizeMB = (zipBlob.size / 1024 / 1024).toFixed(2);
+          console.log(`[EXPORT-UI] ZIP created: ${zipSizeMB} MB, took ${zipDuration}s`);
+
+          const timestamp = new Date().toISOString().slice(0, 10);
+          console.log(`[EXPORT-UI] Downloading ZIP file: Otter_Order_Materials_${timestamp}.zip`);
+          downloadFile(zipBlob, `Otter_Order_Materials_${timestamp}.zip`);
+
+          exportStatus.innerHTML = '<span class="status success">✓ ZIP file downloaded!</span>';
+          console.log(`[EXPORT-UI] ZIP export complete!`);
+
+        } else if (exportMode === 'individual') {
+          // Download individual files
+          console.log(`[EXPORT-UI] Starting individual downloads for ${exportedImages.length} files...`);
+          exportStatus.innerHTML = '<span class="status processing">⏳ Downloading files...</span>';
+
+          // Download files sequentially with better error handling
+          for (let index = 0; index < exportedImages.length; index++) {
+            const img = exportedImages[index];
+
+            await new Promise((resolve) => {
+              setTimeout(() => {
+                try {
+                  console.log(`[EXPORT-UI] Downloading file ${index + 1}/${exportedImages.length}: ${img.name}`);
+                  const blob = new Blob([img.bytes], { type: 'application/pdf' });
+                  const sanitizedName = img.name.replace(/[^a-z0-9가-힣\s\-_]/gi, '_');
+                  downloadFile(blob, `${sanitizedName}.pdf`);
+                  console.log(`[EXPORT-UI] Download triggered successfully for: ${sanitizedName}.pdf`);
+
+                  // Update progress
+                  exportStatus.innerHTML = `<span class="status processing">⏳ Downloaded ${index + 1} of ${exportedImages.length} files...</span>`;
+                } catch (error) {
+                  console.error(`[EXPORT-UI] Error downloading file ${index + 1}:`, error);
+                }
+                resolve(null);
+              }, 500); // Longer delay to ensure browser processes each download
+            });
+          }
+
+          exportStatus.innerHTML = `<span class="status success">✓ All ${exportedImages.length} PDFs downloaded!</span>`;
+          console.log(`[EXPORT-UI] All individual downloads complete!`);
+        }
+
+        document.getElementById('export-individual-png').disabled = false;
+        document.getElementById('export-zip').disabled = false;
+
+      } catch (error) {
+        console.error(`[EXPORT-UI] ERROR:`, error);
+        exportStatus.innerHTML = `<span class="status error">❌ Export failed: ${error.message}</span>`;
+        document.getElementById('export-individual-png').disabled = false;
+        document.getElementById('export-zip').disabled = false;
+      }
+    }
+
+    function handleExportProgress(data) {
+      console.log(`[EXPORT-UI] Progress update: ${data.current}/${data.total} (${data.percentage}%)`);
+      const exportStatus = document.getElementById('export-status');
+      exportStatus.innerHTML = `<span class="status processing">⏳ Exporting ${data.current} of ${data.total}...</span>`;
+    }
+  </script>
+</body>
+</html>

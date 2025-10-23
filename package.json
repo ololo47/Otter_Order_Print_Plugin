@@ -1,0 +1,23 @@
+{
+  "name": "otter-order-material-generator",
+  "version": "1.0.0",
+  "description": "Figma plugin to generate customized posters and flyers for Otter Order Korean restaurants",
+  "main": "code.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "keywords": [
+    "figma",
+    "plugin",
+    "otter-order",
+    "korean",
+    "print-automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.98.0",
+    "typescript": "^5.3.3"
+  }
+}

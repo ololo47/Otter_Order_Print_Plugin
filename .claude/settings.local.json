@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm install:*)",
+      "Bash(ls:*)",
+      "Bash(/opt/homebrew/bin/magick:*)",
+      "Bash(\"/Users/osublee/Print_Automator_FigmaPlugIn/source/큰집보쌈 - Poster (Design 2)_A2.pdf\")",
+      "Bash(/opt/homebrew/bin/magick identify:*)",
+      "Bash(\"/Users/osublee/Print_Automator_FigmaPlugIn/source/큰집보쌈_-_Poster_(Design_2)_1x_A2_Test.pdf\")",
+      "Bash(open:*)",
+      "Bash(\"/Users/osublee/Print_Automator_FigmaPlugIn/source/1654x2339_A2.pdf\")",
+      "Bash(git branch:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
