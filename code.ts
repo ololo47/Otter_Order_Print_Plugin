@@ -32,10 +32,49 @@ interface CSVRow {
 interface GenerationOptions {
   generatePosters: boolean;
   generateFlyers: boolean;
+  generateStickers: boolean;
   groupByBrand: boolean;
 }
 
+// QR Code Promise Tracker - for synchronizing async QR code generation
+const qrCodePromises = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
+
+// Frame size constants (in pixels at 100 DPI, exported at 3x = 300 DPI)
+const FRAME_SIZES = {
+  POSTER_A2: { width: 1654, height: 2339, physicalMM: '420×594mm', name: 'A2 Poster' },
+  FLYER_A5: { width: 591, height: 835, physicalMM: '150×212mm (with bleed)', name: 'A5 Flyer' },
+  STICKER_40MM: { width: 174, height: 174, physicalMM: '44×44mm (with bleed)', name: '44mm Sticker' }
+};
+
+// Tolerance for frame size validation (allow ±1px for rounding)
+const SIZE_TOLERANCE = 1;
+
 // Helper Functions
+function validateFrameSize(
+  frame: FrameNode,
+  expectedSize: { width: number; height: number; physicalMM: string; name: string }
+): { isValid: boolean; error?: string } {
+  const actualWidth = Math.round(frame.width);
+  const actualHeight = Math.round(frame.height);
+  const expectedWidth = expectedSize.width;
+  const expectedHeight = expectedSize.height;
+
+  const widthDiff = Math.abs(actualWidth - expectedWidth);
+  const heightDiff = Math.abs(actualHeight - expectedHeight);
+
+  if (widthDiff > SIZE_TOLERANCE || heightDiff > SIZE_TOLERANCE) {
+    return {
+      isValid: false,
+      error: `Frame size mismatch!\n\n` +
+        `Expected: ${expectedWidth}×${expectedHeight}px (${expectedSize.physicalMM} at 100 DPI)\n` +
+        `Actual: ${actualWidth}×${actualHeight}px\n\n` +
+        `Please resize your frame to exactly ${expectedWidth}×${expectedHeight}px for correct ${expectedSize.name} export at 300 DPI.`
+    };
+  }
+
+  return { isValid: true };
+}
+
 function processTextReplacements(
   text: string,
   storeName: string,
@@ -93,6 +132,24 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
         await clearAllTemplates();
         break;
 
+      case 'delete-template':
+        await deleteTemplate(msg.data);
+        break;
+
+      case 'qr-code-generated':
+        await handleQRCodeGenerated(msg.data);
+        break;
+
+      case 'qr-code-error':
+        console.error(`QR code generation error for frame ${msg.data.frameId}:`, msg.data.error);
+        // Reject the promise on error
+        const promise = qrCodePromises.get(msg.data.frameId);
+        if (promise) {
+          promise.reject(new Error(msg.data.error));
+          qrCodePromises.delete(msg.data.frameId);
+        }
+        break;
+
       case 'cancel':
         figma.closePlugin();
         break;
@@ -105,7 +162,7 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
   }
 };
 
-async function handleAddTemplate(data: { type: 'poster' | 'flyer', designName: string }) {
+async function handleAddTemplate(data: { type: 'poster' | 'flyer' | 'sticker', designName: string }) {
   const selection = figma.currentPage.selection;
 
   if (selection.length !== 1 || selection[0].type !== 'FRAME') {
@@ -118,7 +175,50 @@ async function handleAddTemplate(data: { type: 'poster' | 'flyer', designName: s
 
   const frame = selection[0] as FrameNode;
 
-  // Find text layers with placeholders based on template type
+  // Validate frame size based on template type
+  let expectedSize;
+  if (data.type === 'poster') {
+    expectedSize = FRAME_SIZES.POSTER_A2;
+  } else if (data.type === 'flyer') {
+    expectedSize = FRAME_SIZES.FLYER_A5;
+  } else if (data.type === 'sticker') {
+    expectedSize = FRAME_SIZES.STICKER_40MM;
+  }
+
+  if (expectedSize) {
+    const validation = validateFrameSize(frame, expectedSize);
+    if (!validation.isValid) {
+      figma.ui.postMessage({
+        type: 'error',
+        message: validation.error!
+      });
+      figma.notify('⚠️ Frame size is incorrect', { error: true });
+      return;
+    }
+  }
+
+  // Handle sticker templates differently (no text placeholders needed)
+  if (data.type === 'sticker') {
+    const template: StoredTemplate = {
+      id: frame.id,
+      name: frame.name,
+      designName: 'Default', // Always "Default" for stickers
+      textLayers: {} // No text layers needed for stickers
+    };
+
+    const key = 'sticker_template'; // Single key, no design variants
+    await figma.clientStorage.setAsync(key, template);
+
+    figma.ui.postMessage({
+      type: 'template-added',
+      data: { ...template, templateType: 'sticker' }
+    });
+
+    figma.notify('✓ Sticker template added successfully (174×174px = 44×44mm at 300 DPI)');
+    return;
+  }
+
+  // Find text layers with placeholders based on template type (for poster/flyer)
   const textLayers: {
     poster_copy?: string[];
     flyer_copy?: string[];
@@ -168,7 +268,10 @@ async function handleAddTemplate(data: { type: 'poster' | 'flyer', designName: s
     data: { ...template, templateType: data.type }
   });
 
-  figma.notify(`✓ Template "${data.designName}" added successfully`);
+  const sizeInfo = data.type === 'poster'
+    ? '(1654×2339px = A2 at 300 DPI)'
+    : '(591×835px = A5 at 300 DPI)';
+  figma.notify(`✓ ${data.type === 'poster' ? 'Poster' : 'Flyer'} template "${data.designName}" added successfully ${sizeInfo}`);
 }
 
 async function validateAllTemplates() {
@@ -211,7 +314,7 @@ async function generateMaterials(data: {
 }) {
   const { csvData, options } = data;
   let processed = 0;
-  const itemsPerRow = (options.generatePosters ? 1 : 0) + (options.generateFlyers ? 1 : 0);
+  const itemsPerRow = (options.generatePosters ? 1 : 0) + (options.generateFlyers ? 1 : 0) + (options.generateStickers ? 1 : 0);
   const total = csvData.length * itemsPerRow;
 
   // Create a container frame for all generated materials
@@ -276,9 +379,13 @@ async function generateMaterials(data: {
             posterCopy,
             brandContainer || mainContainer
           );
-          // Store website URL for future QR code feature
+          // Store website URL for future reference
           posterFrame.setPluginData('websiteUrl', websiteUrl);
           generatedNodeIds.push(posterFrame.id);
+
+          // Insert QR code if URL is provided
+          await insertQRCodeIntoFrame(posterFrame.id, websiteUrl);
+
           processed++;
           updateProgress(processed, total);
         } catch (error) {
@@ -298,13 +405,41 @@ async function generateMaterials(data: {
             flyerCopy,
             brandContainer || mainContainer
           );
-          // Store website URL for future QR code feature
+          // Store website URL for future reference
           flyerFrame.setPluginData('websiteUrl', websiteUrl);
           generatedNodeIds.push(flyerFrame.id);
+
+          // Insert QR code if URL is provided
+          await insertQRCodeIntoFrame(flyerFrame.id, websiteUrl);
+
           processed++;
           updateProgress(processed, total);
         } catch (error) {
           const errorMsg = `Flyer for ${storeName}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          errors.push(errorMsg);
+          console.error(errorMsg);
+        }
+      }
+
+      // Generate sticker if selected
+      if (options.generateStickers) {
+        try {
+          const stickerFrame = await generateSticker(
+            storeName,
+            websiteUrl,
+            brandContainer || mainContainer
+          );
+          // Store website URL for future reference
+          stickerFrame.setPluginData('websiteUrl', websiteUrl);
+          generatedNodeIds.push(stickerFrame.id);
+
+          // Insert QR code with website URL
+          await insertQRCodeIntoFrame(stickerFrame.id, websiteUrl);
+
+          processed++;
+          updateProgress(processed, total);
+        } catch (error) {
+          const errorMsg = `Sticker for ${storeName}: ${error instanceof Error ? error.message : 'Unknown error'}`;
           errors.push(errorMsg);
           console.error(errorMsg);
         }
@@ -399,6 +534,35 @@ async function generateFlyer(
   return clone;
 }
 
+async function generateSticker(
+  storeName: string,
+  websiteUrl: string,
+  container: FrameNode
+): Promise<FrameNode> {
+  // Load single sticker template (no design variants)
+  const templateKey = 'sticker_template';
+  const template = await figma.clientStorage.getAsync(templateKey) as StoredTemplate;
+
+  if (!template) {
+    throw new Error('Sticker template not found. Please add sticker template first.');
+  }
+
+  const templateFrame = figma.getNodeById(template.id) as FrameNode;
+  if (!templateFrame) {
+    throw new Error(`Sticker template "${template.name}" no longer exists. Please re-add this template.`);
+  }
+
+  const clone = templateFrame.clone();
+  clone.name = `${storeName} - Sticker (40mm)`;
+
+  // Note: No text replacement needed for stickers - template is static
+  // QR code will be inserted separately via insertQRCodeIntoFrame()
+
+  container.appendChild(clone);
+
+  return clone;
+}
+
 async function replaceTextInNode(
   node: SceneNode,
   copyText: string,
@@ -459,9 +623,11 @@ async function getStoredTemplates() {
   const keys = await figma.clientStorage.keysAsync();
   const posterKeys = keys.filter(k => k.startsWith('poster_template_'));
   const flyerKeys = keys.filter(k => k.startsWith('flyer_template_'));
+  const stickerKey = 'sticker_template';
 
   const posters = [];
   const flyers = [];
+  let sticker = null;
 
   for (const key of posterKeys) {
     const template = await figma.clientStorage.getAsync(key);
@@ -473,15 +639,34 @@ async function getStoredTemplates() {
     flyers.push({ ...template, key });
   }
 
+  if (keys.includes(stickerKey)) {
+    const template = await figma.clientStorage.getAsync(stickerKey);
+    sticker = { ...template, key: stickerKey };
+  }
+
   figma.ui.postMessage({
     type: 'stored-templates',
-    data: { posters, flyers }
+    data: { posters, flyers, sticker }
   });
+}
+
+async function deleteTemplate(data: { key: string }) {
+  try {
+    await figma.clientStorage.deleteAsync(data.key);
+
+    // Refresh the template list
+    await getStoredTemplates();
+
+    figma.notify('✓ Template deleted successfully');
+  } catch (error) {
+    figma.notify('⚠️ Error deleting template', { error: true });
+    throw error;
+  }
 }
 
 async function clearAllTemplates() {
   const keys = await figma.clientStorage.keysAsync();
-  const templateKeys = keys.filter(k => k.startsWith('poster_template_') || k.startsWith('flyer_template_'));
+  const templateKeys = keys.filter(k => k.startsWith('poster_template_') || k.startsWith('flyer_template_') || k === 'sticker_template');
 
   for (const key of templateKeys) {
     await figma.clientStorage.deleteAsync(key);
@@ -619,4 +804,163 @@ async function exportAsPNG(data: { nodeIds: string[] }) {
     });
     figma.notify('Export failed', { error: true });
   }
+}
+
+async function handleQRCodeGenerated(data: { frameId: string, qrCodeBytes: Uint8Array }) {
+  const { frameId, qrCodeBytes } = data;
+
+  try {
+    console.log(`[QR-CODE-PLUGIN] Received QR code for frame ${frameId}`);
+
+    const frame = figma.getNodeById(frameId) as FrameNode;
+    if (!frame) {
+      console.error(`[QR-CODE-PLUGIN] Frame ${frameId} not found`);
+      // Reject the promise if frame not found
+      const promise = qrCodePromises.get(frameId);
+      if (promise) {
+        promise.reject(new Error('Frame not found'));
+        qrCodePromises.delete(frameId);
+      }
+      return;
+    }
+
+    // Find QR code placeholder frame and get color
+    const result = findQRCodeFrame(frame);
+    if (!result) {
+      console.warn(`[QR-CODE-PLUGIN] No 'qrcode_here' frame found in ${frame.name}`);
+      // Resolve the promise anyway (frame was generated, just no QR placeholder)
+      const promise = qrCodePromises.get(frameId);
+      if (promise) {
+        promise.resolve();
+        qrCodePromises.delete(frameId);
+      }
+      return;
+    }
+
+    const { frame: qrCodeFrame, color } = result;
+    console.log(`[QR-CODE-PLUGIN] Found QR code frame: ${qrCodeFrame.name} with color: ${color}`);
+
+    // Create image from QR code bytes
+    const image = figma.createImage(qrCodeBytes);
+
+    // Clear existing content in QR code frame
+    qrCodeFrame.children.forEach(child => child.remove());
+
+    // Create rectangle to hold the QR code
+    const rect = figma.createRectangle();
+    rect.resize(qrCodeFrame.width, qrCodeFrame.height);
+    rect.fills = [{
+      type: 'IMAGE',
+      imageHash: image.hash,
+      scaleMode: 'FIT'
+    }];
+
+    // Add rectangle to QR code frame
+    qrCodeFrame.appendChild(rect);
+
+    console.log(`[QR-CODE-PLUGIN] QR code inserted successfully into ${qrCodeFrame.name}`);
+
+    // Resolve the promise to signal completion
+    const promise = qrCodePromises.get(frameId);
+    if (promise) {
+      promise.resolve();
+      qrCodePromises.delete(frameId);
+    }
+  } catch (error) {
+    console.error(`[QR-CODE-PLUGIN] Error inserting QR code:`, error);
+    // Reject the promise on error
+    const promise = qrCodePromises.get(frameId);
+    if (promise) {
+      promise.reject(error instanceof Error ? error : new Error('Unknown error'));
+      qrCodePromises.delete(frameId);
+    }
+  }
+}
+
+function findQRCodeFrame(node: SceneNode): { frame: FrameNode; color: string } | null {
+  // Check if current node is the QR code frame
+  if (node.type === 'FRAME' && node.name.toLowerCase().includes('qrcode_here')) {
+    // Extract hex color from frame name (e.g., "qrcode_here_#FF0000" or "qrcode_here_FF0000")
+    const color = extractColorFromFrameName(node.name);
+    return { frame: node, color };
+  }
+
+  // Recursively search children
+  if ('children' in node) {
+    for (const child of node.children) {
+      const found = findQRCodeFrame(child);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+function extractColorFromFrameName(frameName: string): string {
+  const defaultColor = '#000000';
+
+  // Match pattern: qrcode_here_#RRGGBB or qrcode_here_RRGGBB (case-insensitive)
+  const match = frameName.match(/qrcode_here_#?([0-9A-Fa-f]{6})/i);
+
+  if (!match) {
+    console.log(`[QR-CODE-PLUGIN] No color specified in frame "${frameName}", using default: ${defaultColor}`);
+    return defaultColor;
+  }
+
+  const hexCode = match[1].toUpperCase();
+  const color = `#${hexCode}`;
+
+  console.log(`[QR-CODE-PLUGIN] Extracted color from frame "${frameName}": ${color}`);
+  return color;
+}
+
+async function insertQRCodeIntoFrame(frameId: string, websiteUrl: string): Promise<void> {
+  if (!websiteUrl || websiteUrl.trim() === '') {
+    console.log(`[QR-CODE-PLUGIN] No website URL for frame ${frameId}, skipping QR code generation`);
+    return Promise.resolve();
+  }
+
+  // Get the frame and find the QR code frame to extract color
+  const frame = figma.getNodeById(frameId) as FrameNode;
+  if (!frame) {
+    console.error(`[QR-CODE-PLUGIN] Frame ${frameId} not found`);
+    return Promise.resolve();
+  }
+
+  const result = findQRCodeFrame(frame);
+  if (!result) {
+    console.log(`[QR-CODE-PLUGIN] No 'qrcode_here' frame found in ${frame.name}, skipping QR code`);
+    return Promise.resolve();
+  }
+
+  const color = result.color;
+
+  console.log(`[QR-CODE-PLUGIN] Requesting QR code generation for frame ${frameId}, URL: ${websiteUrl}, Color: ${color}`);
+
+  // Create a promise that will be resolved when the QR code is inserted
+  const qrCodePromise = new Promise<void>((resolve, reject) => {
+    qrCodePromises.set(frameId, { resolve, reject });
+
+    // Set a timeout to prevent hanging (10 seconds)
+    setTimeout(() => {
+      if (qrCodePromises.has(frameId)) {
+        qrCodePromises.delete(frameId);
+        console.warn(`[QR-CODE-PLUGIN] QR code generation timeout for frame ${frameId}`);
+        resolve(); // Resolve anyway to not block the generation process
+      }
+    }, 10000);
+  });
+
+  // Request QR code generation from UI with color
+  figma.ui.postMessage({
+    type: 'generate-qr-code',
+    data: {
+      frameId: frameId,
+      url: websiteUrl,
+      color: color
+    }
+  });
+
+  // Wait for the QR code to be generated and inserted
+  return qrCodePromise;
 }

@@ -11,7 +11,8 @@
       "Bash(\"/Users/osublee/Print_Automator_FigmaPlugIn/source/큰집보쌈_-_Poster_(Design_2)_1x_A2_Test.pdf\")",
       "Bash(open:*)",
       "Bash(\"/Users/osublee/Print_Automator_FigmaPlugIn/source/1654x2339_A2.pdf\")",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
