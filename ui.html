@@ -1171,6 +1171,69 @@
       }
     }
 
+    // Helper function to compress PNG by converting to JPEG (for photo-heavy designs)
+    async function compressPNGtoJPEG(pngBytes, quality = 0.92) {
+      const compressionStartTime = Date.now();
+      const originalSizeMB = (pngBytes.length / 1024 / 1024).toFixed(2);
+      console.log(`[IMAGE-COMPRESS] Starting compression: ${originalSizeMB} MB PNG → JPEG`);
+
+      try {
+        // Create a blob from the PNG bytes
+        const blob = new Blob([pngBytes], { type: 'image/png' });
+        const url = URL.createObjectURL(blob);
+
+        // Load image into an Image element
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = url;
+        });
+
+        // Create canvas with same dimensions
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          throw new Error('Could not get canvas context');
+        }
+
+        // Fill white background (JPEG doesn't support transparency)
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw image to canvas
+        ctx.drawImage(img, 0, 0);
+
+        // Clean up
+        URL.revokeObjectURL(url);
+
+        // Convert to JPEG with quality compression
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        const compressedBase64 = compressedDataUrl.split(',')[1];
+        const binaryString = atob(compressedBase64);
+        const compressedBytes = new Uint8Array(binaryString.length);
+
+        for (let i = 0; i < binaryString.length; i++) {
+          compressedBytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const compressionEndTime = Date.now();
+        const compressionDuration = ((compressionEndTime - compressionStartTime) / 1000).toFixed(2);
+        const compressedSizeMB = (compressedBytes.length / 1024 / 1024).toFixed(2);
+        const compressionRatio = ((1 - compressedBytes.length / pngBytes.length) * 100).toFixed(1);
+
+        console.log(`[IMAGE-COMPRESS] Compression complete: ${compressedSizeMB} MB JPEG (${compressionRatio}% reduction), took ${compressionDuration}s`);
+
+        return { bytes: compressedBytes, format: 'jpeg' };
+      } catch (error) {
+        console.error(`[IMAGE-COMPRESS] Compression failed, using original PNG:`, error);
+        return { bytes: pngBytes, format: 'png' }; // Return original if compression fails
+      }
+    }
+
     // Helper function to convert PNG to PDF using pdf-lib (uses actual PNG dimensions)
     async function convertPNGtoPDF(pngBytes, fileName) {
       const startTime = Date.now();
@@ -1180,19 +1243,55 @@
       try {
         const { PDFDocument } = PDFLib;
 
+        // Compress PNG if it's larger than 5MB
+        let imageData = { bytes: pngBytes, format: 'png' };
+        if (pngBytes.length > 5 * 1024 * 1024) {
+          console.log(`[PDF-CONVERT] PNG is large (${sizeMB} MB), applying JPEG compression...`);
+          imageData = await compressPNGtoJPEG(pngBytes, 0.92);
+        } else {
+          console.log(`[PDF-CONVERT] PNG size is acceptable (${sizeMB} MB), skipping compression`);
+        }
+
         // Create a new PDF document
         const pdfDoc = await PDFDocument.create();
 
-        // Embed the PNG image
-        const pngImage = await pdfDoc.embedPng(pngBytes);
+        // Embed the image (JPEG or PNG)
+        let embeddedImage;
+        if (imageData.format === 'jpeg') {
+          embeddedImage = await pdfDoc.embedJpg(imageData.bytes);
+        } else {
+          embeddedImage = await pdfDoc.embedPng(imageData.bytes);
+        }
 
-        // Get actual PNG dimensions (these are already at 300 DPI from 3x export)
-        const pngWidth = pngImage.width;
-        const pngHeight = pngImage.height;
+        // Get actual image dimensions (these are already at 300 DPI from 3x export)
+        const pngWidth = embeddedImage.width;
+        const pngHeight = embeddedImage.height;
 
-        // Convert PNG dimensions to PDF points (PNG is at 300 DPI, PDF uses 72 DPI)
-        const widthInPoints = (pngWidth * 72) / 300;
-        const heightInPoints = (pngHeight * 72) / 300;
+        // Check if this is an A2 Poster (1654×2339 at 100 DPI → ~4962×7017 at 300 DPI)
+        // For A2 posters, use exact print shop dimensions
+        // Use tolerance (±10px) because Figma export might have slight variations
+        const expectedA2Width = 4962;
+        const expectedA2Height = 7017;
+        const tolerance = 10;
+        const isA2Poster = (
+          Math.abs(pngWidth - expectedA2Width) <= tolerance &&
+          Math.abs(pngHeight - expectedA2Height) <= tolerance
+        );
+
+        let widthInPoints, heightInPoints;
+
+        if (isA2Poster) {
+          // Use EXACT print shop dimensions from OhPrint.me guide (Poster_A2_Portrait.pdf)
+          // Required: 42.2 × 59.6 cm = 1196.22 × 1689.45 points
+          widthInPoints = 1196.22;
+          heightInPoints = 1689.45;
+          console.log(`[PDF-CONVERT] Detected A2 Poster - using exact print shop dimensions (42.2 × 59.6 cm)`);
+        } else {
+          // For other materials (A5, stickers), use actual frame dimensions
+          widthInPoints = (pngWidth * 72) / 300;
+          heightInPoints = (pngHeight * 72) / 300;
+          console.log(`[PDF-CONVERT] Using dynamic dimensions based on actual frame size`);
+        }
 
         // Calculate physical dimensions in cm for logging
         const widthInCm = (widthInPoints / 72) * 2.54;
@@ -1201,11 +1300,22 @@
         console.log(`[PDF-CONVERT] PNG dimensions: ${pngWidth}×${pngHeight} pixels at 300 DPI`);
         console.log(`[PDF-CONVERT] PDF page: ${widthInPoints.toFixed(2)}×${heightInPoints.toFixed(2)} points (${widthInCm.toFixed(1)}×${heightInCm.toFixed(1)} cm)`);
 
-        // Add a page with dimensions matching the PNG
+        // Add a page with exact dimensions
         const page = pdfDoc.addPage([widthInPoints, heightInPoints]);
 
+        // Set professional print PDF boxes (required by print shops)
+        // MediaBox is set automatically by addPage, but we ensure others match
+        if (isA2Poster) {
+          // For A2 posters, set all boxes to match print shop guide requirements
+          page.setMediaBox(0, 0, widthInPoints, heightInPoints);
+          page.setCropBox(0, 0, widthInPoints, heightInPoints);
+          page.setBleedBox(0, 0, widthInPoints, heightInPoints);
+          page.setTrimBox(0, 0, widthInPoints, heightInPoints);
+          console.log(`[PDF-CONVERT] Set professional print boxes (MediaBox, CropBox, BleedBox, TrimBox)`);
+        }
+
         // Draw the image to fill the entire page
-        page.drawImage(pngImage, {
+        page.drawImage(embeddedImage, {
           x: 0,
           y: 0,
           width: widthInPoints,
